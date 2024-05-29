@@ -1,0 +1,48 @@
+mqtt:
+  brokers:
+    - "mqtt://127.0.0.1:1883"
+  client_id: "atm-backend"
+
+  topics: # ATM devices' topics
+    - "pulseacceptord"
+    - "codescannerd"
+
+log_format: "pretty"
+log_file: "log.txt"
+
+# Mainnet or stagenet.
+mode: "mainnet"
+
+# This is the ATM fee percentage. For example 0.5 is 0.5%
+fee: 0.5
+
+# Address of remote MoneroPay instance.
+moneropay: "http://localhost:5000"
+
+# Timeout for requests to MoneroPay. This option is important especially if the
+# ATM is located somewhere with poor network speeds.
+moneropay_timeout: "3m"
+
+# Check MoneroPay's /health this often.
+moneropay_health_poll_frequency: "10s"
+
+# Update the price value this often.
+price_poll_frequency: "5m"
+
+# Currency short name to display in UI.
+currency_short: "EUR"
+
+# Some message to display on the idle view
+motd: "Welcome to Monero Konferenco 2023!"
+
+# When to return to idle view after inactivity. If the user has
+# inputted address and money into the ATM already, after this much
+# time monero will be sent.
+state_timeout: "5m"
+
+# After a withdrawal has been completed, return to the idle view
+# after this much time.
+finish_timeout: "30s"
+
+# Rate to use if fetching it online wasn't possible.
+fallback_rate: 123.45

@@ -80,18 +80,24 @@ func mpayHealthPoll() {
 			pause = p
 		case <-time.After(cfg.MpayHealthPollFreq):
 			if !pause {
-				health, err := mpayHealth()
+				isHealthy := false
+				healthResp, err := mpayHealth()
 				if err != nil {
 					log.Error().Err(err).Msg("Failed to get MoneroPay health status")
-					mpayHealthUpdate <- mpayHealthEvent(false)
 				} else {
-					if health.Status == 200 {
-						mpayHealthUpdate <- mpayHealthEvent(true)
-						continue
+					if healthResp.Status == 200 {
+						isHealthy = true
+					} else {
+						log.Info().Int("status", healthResp.Status).Msg("MoneroPay health is degraded")
 					}
-					log.Info().Int("status", health.Status).Msg("MoneroPay health is degraded")
-					mpayHealthUpdate <- mpayHealthEvent(false)
 				}
+				healthUpdate := update{Event: "mpay_health", Data: isHealthy}
+				updateBytes, err := json.Marshal(healthUpdate)
+				if err != nil {
+					log.Error().Err(err).Msg("Failed to marshal MoneroPay health status update")
+				}
+				log.Info().Str("data", string(updateBytes)).Msg("Moneropay Update")
+				outgoing <- updateBytes
 			}
 		}
 	}

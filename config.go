@@ -18,7 +18,7 @@ type brokerConfig struct {
 	Topics        []string `yaml:"topics"`
 	ClientId      string   `yaml:"client_id"`
 	BrokerUrls    []*url.URL
-	Subscriptions map[string]paho.SubscribeOptions
+	Subscriptions []paho.SubscribeOptions
 }
 
 type backendConfig struct {
@@ -37,6 +37,7 @@ type backendConfig struct {
 	FinishTimeout      time.Duration `yaml:"finish_timeout"`
 	FallbackPrice      float64       `yaml:"fallback_price"`
 	FiatEurRate        float64
+	Bind               string `yaml:"bind"`
 }
 
 func loadConfig() backendConfig {
@@ -70,9 +71,9 @@ func loadConfig() backendConfig {
 		cfg.Mqtt.BrokerUrls = append(cfg.Mqtt.BrokerUrls, u)
 	}
 
-	cfg.Mqtt.Subscriptions = make(map[string]paho.SubscribeOptions)
 	for _, topic := range cfg.Mqtt.Topics {
-		cfg.Mqtt.Subscriptions[topic] = paho.SubscribeOptions{QoS: 2, NoLocal: true}
+		cfg.Mqtt.Subscriptions = append(cfg.Mqtt.Subscriptions, paho.SubscribeOptions{
+			Topic: topic, QoS: 2, NoLocal: true})
 	}
 
 	if cfg.CurrencyShort != "EUR" && cfg.CurrencyShort != "USD" {

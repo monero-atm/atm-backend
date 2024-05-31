@@ -91,13 +91,10 @@ func mpayHealthPoll() {
 						log.Info().Int("status", healthResp.Status).Msg("MoneroPay health is degraded")
 					}
 				}
-				healthUpdate := update{Event: "mpay_health", Data: isHealthy}
-				updateBytes, err := json.Marshal(healthUpdate)
-				if err != nil {
-					log.Error().Err(err).Msg("Failed to marshal MoneroPay health status update")
+				if err := sendToFrontend(update{Event: "mpay_health", Data: isHealthy}); err != nil {
+					log.Error().Err(err).Msg("Failed to send MoneroPay health status update")
 				}
-				log.Info().Str("data", string(updateBytes)).Msg("Moneropay Update")
-				outgoing <- updateBytes
+				log.Info().Bool("healthy", isHealthy).Msg("Moneropay Update")
 			}
 		}
 	}

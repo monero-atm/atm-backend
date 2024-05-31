@@ -46,9 +46,14 @@ func connectToBroker() *autopaho.ConnectionManager {
 		OnConnectError: onConnectionError,
 		ClientConfig: paho.ClientConfig{
 			ClientID: cfg.Mqtt.ClientId,
-			Router: paho.NewSingleHandlerRouter(func(m *paho.Publish) {
-				handleEvents(m)
-			}),
+			OnPublishReceived: []func(paho.PublishReceived) (bool, error){
+				func(pr paho.PublishReceived) (bool, error) {
+					log.Debug().Str("topic", pr.Packet.Topic).
+						Str("payload", string(pr.Packet.Payload)).Msg("")
+					handleEvents(pr.Packet.Payload)
+					return true, nil
+				},
+			},
 			OnClientError:      onClientError,
 			OnServerDisconnect: onServerDisconnect,
 		},

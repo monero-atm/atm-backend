@@ -6,7 +6,7 @@ mqtt:
   client_id: "atm-backend"
 
   topics: # ATM devices' topics
-    - "pulseacceptord"
+    - "moneyacceptord"
     - "codescannerd"
 
 log_format: "pretty"

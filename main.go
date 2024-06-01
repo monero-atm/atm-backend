@@ -1,14 +1,14 @@
 package main
 
 import (
-	"encoding/json"
 	"encoding/base64"
-	"net/http"
+	"encoding/json"
 	"fmt"
+	"net/http"
 
 	"github.com/eclipse/paho.golang/autopaho"
-	"github.com/rs/zerolog/log"
 	"github.com/gorilla/websocket"
+	"github.com/rs/zerolog/log"
 	mpay "gitlab.com/moneropay/moneropay/v2/pkg/model"
 	"gitlab.com/openkiosk/proto"
 )
@@ -34,19 +34,19 @@ type fiat struct {
 }
 
 type sessionData struct {
-	conn       *websocket.Conn
-	broker     *autopaho.ConnectionManager
-	state      State
-	address    string
-	fiats      []fiat
-	xmr        uint64
-	fee        float64
-	xmrPrices  map[string]float64
-	err        error
-	height     int
-	width      int
-	mpayHealth bool
-	tx         *mpay.TransferPostResponse
+	conn        *websocket.Conn
+	broker      *autopaho.ConnectionManager
+	state       State
+	address     string
+	fiatBalance map[string]int64
+	xmr         uint64
+	fee         float64
+	xmrPrices   map[string]float64
+	err         error
+	height      int
+	width       int
+	mpayHealth  bool
+	tx          *mpay.TransferPostResponse
 }
 
 var (
@@ -65,7 +65,7 @@ var (
 	okUpdate chan proto.Event
 
 	priceEvent chan priceUpdate
-	pricePause  chan bool
+	pricePause chan bool
 
 	mpayHealthUpdate chan mpayHealthEvent
 	mpayHealthPause  chan bool
@@ -85,8 +85,9 @@ func main() {
 	okUpdate = make(chan proto.Event)
 
 	session = &sessionData{
-		broker: connectToBroker(),
-		xmrPrices: make(map[string]float64),
+		broker:      connectToBroker(),
+		xmrPrices:   make(map[string]float64),
+		fiatBalance: make(map[string]int64),
 	}
 
 	go session.appLogic()
@@ -105,6 +106,8 @@ func atmSessionHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	session.conn = c
+
+	cmd(session.broker, "moneyacceptord", "stop")
 	cmd(session.broker, "codescannerd", "start")
 	go session.handleIncoming()
 	go session.handleOutgoing()
@@ -114,7 +117,7 @@ func atmSessionHandler(w http.ResponseWriter, r *http.Request) {
 func (s *sessionData) handleIncoming() {
 	for {
 		select {
-		case <- endSession:
+		case <-endSession:
 			log.Debug().Msg("Exited handleIncoming")
 			return
 		default:
@@ -145,7 +148,7 @@ func (s *sessionData) handleOutgoing() {
 				endSession <- struct{}{}
 				return
 			}
-		case <- endSession:
+		case <-endSession:
 			log.Debug().Msg("Exited handleOutgoing")
 			return
 		}
@@ -157,25 +160,29 @@ func (s *sessionData) handleOutgoing() {
 func (s *sessionData) appLogic() {
 	for {
 		select {
-		case frontendUpdate := <- incoming:
+		case frontendUpdate := <-incoming:
 			var front update
 			if err := json.Unmarshal(frontendUpdate, &front); err != nil {
 				log.Error().Err(err).Msg("Malformed frontend update")
 				continue
 			}
 			log.Info().Str("type", front.Event).Msg("Received frontend event")
-			switch (front.Event) {
+			switch front.Event {
 			case "start":
 				s.state = AddressIn
 				// Pause price updates and health checks
 				pricePause <- true
 				mpayHealthPause <- true
 				log.Info().Msg("Began new transaction")
+			case "moneyin":
+				s.state = MoneyIn
+				cmd(s.broker, "codescannerd", "stop")
+				cmd(s.broker, "moneyacceptord", "start")
 			case "cancel":
 				// Reset all data from previous transaction
 				s.state = Idle
 				s.address = ""
-				s.fiats = nil
+				s.fiatBalance = make(map[string]int64)
 				s.xmr = 0
 				s.fee = 0
 				s.err = nil
@@ -191,7 +198,7 @@ func (s *sessionData) appLogic() {
 
 				log.Info().Msg("Cancelled transaction")
 			}
-		case hardwareUpdate := <- okUpdate:
+		case hardwareUpdate := <-okUpdate:
 			log.Info().Str("type", hardwareUpdate.Event).Msg("")
 			if hardwareUpdate.Event == "codescan" {
 				log.Info().Str("data", fmt.Sprintf("%v", hardwareUpdate)).Msg("")
@@ -208,12 +215,12 @@ func (s *sessionData) appLogic() {
 				addr := parseAddress(string(decoded))
 				if err := addressValidator(addr); err != nil {
 					log.Error().Err(err).Msg("Invalid address received")
-					if err := sendToFrontend(update{Event:"error", Data: err.Error()}); err != nil {
+					if err := sendToFrontend(update{Event: "error", Data: err.Error()}); err != nil {
 						log.Error().Err(err).Msg("Failed to send to frontend")
 					}
 				}
 				s.address = addr
-				if err := sendToFrontend(update{Event:"addressin", Data: addr}); err != nil {
+				if err := sendToFrontend(update{Event: "addressin", Data: addr}); err != nil {
 					log.Error().Err(err).Msg("Failed to send to frontend")
 				}
 
@@ -222,17 +229,21 @@ func (s *sessionData) appLogic() {
 					pricePause <- true
 					mpayHealthPause <- true
 					log.Info().Msg("Began new transaction")
-					s.state = MoneyIn
 				}
-				s.state = MoneyIn
-				cmd(s.broker, "codescannerd", "stop")
-				cmd(s.broker, "moneyacceptord", "start")
 			}
 			if hardwareUpdate.Event == "moneyin" {
 				log.Info().Str("data", fmt.Sprintf("%v", hardwareUpdate)).Msg("")
+				data, err := proto.GetMoneyinData(hardwareUpdate.Data)
+				if err != nil {
+					log.Error().Err(err).Msg("Failed to unmarshall scan data")
+				}
+				s.fiatBalance[data.Currency] += data.Amount
+				if err := sendToFrontend(update{Event: "moneyin", Data: data}); err != nil {
+					log.Error().Err(err).Msg("Failed to send to frontend")
+				}
 			}
 
-		case price := <- priceEvent:
+		case price := <-priceEvent:
 			for _, pc := range price.Currencies {
 				s.xmrPrices[pc.Short] = pc.Amount
 			}

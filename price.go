@@ -12,13 +12,12 @@ import (
 
 type xmrPrice struct {
 	Amount float64 `json:"amount"`
-	Short string `json:"short"`
+	Short  string  `json:"short"`
 }
 
 type priceUpdate struct {
 	Currencies []xmrPrice `json:"currencies"`
 }
-
 
 var krakenUrl = "https://api.kraken.com/0/public/Ticker?pair=XMR"
 

@@ -29,10 +29,12 @@ moneropay_timeout: "3m"
 moneropay_health_poll_frequency: "10s"
 
 # Update the price value this often.
-price_poll_frequency: "5m"
+price_poll_frequency: "10s"
 
-# Currency short name to display in UI.
-currency_short: "EUR"
+# Supported currency or currencies
+currencies:
+  - "EUR"
+  - "CZK"
 
 # Some message to display on the idle view
 motd: "Welcome to Monero Konferenco 2023!"

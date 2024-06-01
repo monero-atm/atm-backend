@@ -41,7 +41,7 @@ type sessionData struct {
 	fiats      []fiat
 	xmr        uint64
 	fee        float64
-	xmrPrice   float64
+	xmrPrices  map[string]float64
 	err        error
 	height     int
 	width      int
@@ -52,6 +52,9 @@ type sessionData struct {
 var (
 	session *sessionData
 
+	// to signal end of websocket session on errors
+	endSession chan struct{}
+
 	// Updates from frontend
 	incoming chan []byte
 
@@ -61,7 +64,7 @@ var (
 	// OpenKiosk events
 	okUpdate chan proto.Event
 
-	priceUpdate chan priceEvent
+	priceEvent chan priceUpdate
 	pricePause  chan bool
 
 	mpayHealthUpdate chan mpayHealthEvent
@@ -72,9 +75,10 @@ var upgrader = websocket.Upgrader{} // use default options
 
 func main() {
 	cfg = loadConfig()
+	endSession = make(chan struct{})
 	incoming = make(chan []byte)
 	outgoing = make(chan []byte)
-	priceUpdate = make(chan priceEvent)
+	priceEvent = make(chan priceUpdate)
 	pricePause = make(chan bool)
 	mpayHealthUpdate = make(chan mpayHealthEvent)
 	mpayHealthPause = make(chan bool)
@@ -82,12 +86,14 @@ func main() {
 
 	session = &sessionData{
 		broker: connectToBroker(),
+		xmrPrices: make(map[string]float64),
 	}
 
 	go session.appLogic()
-	go pricePoll(cfg.CurrencyShort, cfg.FiatEurRate)
+	go pricePoll(cfg.Currencies, cfg.FiatRates)
 	go mpayHealthPoll()
 
+	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	http.HandleFunc("/ws", atmSessionHandler)
 	log.Fatal().Err(http.ListenAndServe(cfg.Bind, nil)).Msg("Failed to bind")
 }
@@ -107,17 +113,24 @@ func atmSessionHandler(w http.ResponseWriter, r *http.Request) {
 // Updates arriving from the frontend: cancel transaction, stop price update
 func (s *sessionData) handleIncoming() {
 	for {
-		mt, message, err := s.conn.ReadMessage()
-		if err != nil {
-			log.Error().Err(err).Msg("Websocket read")
-			continue
-		}
+		select {
+		case <- endSession:
+			log.Debug().Msg("Exited handleIncoming")
+			return
+		default:
+			mt, message, err := s.conn.ReadMessage()
+			if err != nil {
+				log.Error().Err(err).Msg("Websocket read")
+				endSession <- struct{}{}
+				return
+			}
 
-		// Skip non-text messages
-		if mt != 1 {
-			continue
+			// Skip non-text messages
+			if mt != 1 {
+				continue
+			}
+			incoming <- message
 		}
-		incoming <- message
 	}
 }
 
@@ -126,11 +139,15 @@ func (s *sessionData) handleOutgoing() {
 	for {
 		select {
 		case m := <-outgoing:
-			err := s.conn.WriteMessage(2, m)
+			err := s.conn.WriteMessage(1, m)
 			if err != nil {
 				log.Error().Err(err).Msg("Websocket write")
-				continue
+				endSession <- struct{}{}
+				return
 			}
+		case <- endSession:
+			log.Debug().Msg("Exited handleOutgoing")
+			return
 		}
 	}
 }
@@ -142,10 +159,11 @@ func (s *sessionData) appLogic() {
 		select {
 		case frontendUpdate := <- incoming:
 			var front update
-			if err := json.Unmarshal(frontendUpdate, front); err != nil {
+			if err := json.Unmarshal(frontendUpdate, &front); err != nil {
 				log.Error().Err(err).Msg("Malformed frontend update")
 				continue
 			}
+			log.Info().Str("type", front.Event).Msg("Received frontend event")
 			switch (front.Event) {
 			case "start":
 				s.state = AddressIn
@@ -212,6 +230,14 @@ func (s *sessionData) appLogic() {
 			}
 			if hardwareUpdate.Event == "moneyin" {
 				log.Info().Str("data", fmt.Sprintf("%v", hardwareUpdate)).Msg("")
+			}
+
+		case price := <- priceEvent:
+			for _, pc := range price.Currencies {
+				s.xmrPrices[pc.Short] = pc.Amount
+			}
+			if err := sendToFrontend(update{Event: "price", Data: price}); err != nil {
+				log.Error().Err(err).Msg("Failed to send to frontend")
 			}
 		}
 	}

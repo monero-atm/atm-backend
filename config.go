@@ -31,12 +31,12 @@ type backendConfig struct {
 	MpayTimeout        time.Duration `yaml:"moneropay_timeout"`
 	MpayHealthPollFreq time.Duration `yaml:"moneropay_health_poll_frequency"`
 	PricePollFreq      time.Duration `yaml:"price_poll_frequency"`
-	CurrencyShort      string        `yaml:"currency_short"`
+	Currencies         []string      `yaml:"currencies"`
 	Motd               string        `yaml:"motd"`
 	StateTimeout       time.Duration `yaml:"state_timeout"`
 	FinishTimeout      time.Duration `yaml:"finish_timeout"`
 	FallbackPrice      float64       `yaml:"fallback_price"`
-	FiatEurRate        float64
+	FiatRates          map[string]float64
 	Bind               string `yaml:"bind"`
 }
 
@@ -76,16 +76,22 @@ func loadConfig() backendConfig {
 			Topic: topic, QoS: 2, NoLocal: true})
 	}
 
-	if cfg.CurrencyShort != "EUR" && cfg.CurrencyShort != "USD" {
-		rates, err := fetchEcbDaily()
-		if err != nil {
-			log.Fatalf("Failed to get fiat rate for %s from ECB: %s",
-				cfg.CurrencyShort, err.Error())
+	rates, err := fetchEcbDaily()
+	if err != nil {
+		log.Fatalf("Failed to get fiat rates from ECB: %s", err.Error())
+	}
+	cfg.FiatRates = make(map[string]float64)
+	for _, c := range cfg.Currencies {
+		// XMR pairs are available for these currencies
+		if c == "EUR" || c == "USD" {
+			continue
 		}
-		if val, ok := rates[cfg.CurrencyShort]; ok {
-			cfg.FiatEurRate, err = strconv.ParseFloat(val, 64)
-		} else {
-			log.Fatal("Failed to convert rate string into float64: ", err)
+		if val, ok := rates[c]; ok {
+			cRate, err := strconv.ParseFloat(val, 64)
+			cfg.FiatRates[c] = cRate
+			if err != nil {
+				log.Fatal("Failed to convert rate string into float64: ", err)
+			}
 		}
 	}
 

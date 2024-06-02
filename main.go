@@ -179,24 +179,11 @@ func (s *sessionData) appLogic() {
 				cmd(s.broker, "codescannerd", "stop")
 				cmd(s.broker, "moneyacceptord", "start")
 			case "cancel":
-				// Reset all data from previous transaction
-				s.state = Idle
-				s.address = ""
-				s.fiatBalance = make(map[string]int64)
-				s.xmr = 0
-				s.fee = 0
-				s.err = nil
-				s.tx = nil
-
-				// Enable price updates
-				pricePause <- false
-				mpayHealthPause <- false
-
-				// Stop bill acceptor, enable QR code scanning
-				cmd(s.broker, "moneyacceptord", "stop")
-				cmd(s.broker, "codescannerd", "start")
-
+				s.reset()
 				log.Info().Msg("Cancelled transaction")
+			case "final":
+				s.reset()
+				log.Info().Msg("Finalized transaction")
 			}
 		case hardwareUpdate := <-okUpdate:
 			log.Info().Str("type", hardwareUpdate.Event).Msg("")
@@ -252,4 +239,23 @@ func (s *sessionData) appLogic() {
 			}
 		}
 	}
+}
+
+func (s *sessionData) reset() {
+	// Reset all data from previous transaction
+	s.state = Idle
+	s.address = ""
+	s.fiatBalance = make(map[string]int64)
+	s.xmr = 0
+	s.fee = 0
+	s.err = nil
+	s.tx = nil
+
+	// Enable price updates
+	pricePause <- false
+	mpayHealthPause <- false
+
+	// Stop bill acceptor, enable QR code scanning
+	cmd(s.broker, "moneyacceptord", "stop")
+	cmd(s.broker, "codescannerd", "start")
 }

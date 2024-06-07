@@ -61,7 +61,7 @@ func getKrakenRate(currencyShort string) (float64, error) {
 // specified, this function will calculate the value based on the daily rate
 // provided by European Central Bank. "fiatEurRate" contains this rate.
 // It's ignored when "currency" is set to EUR or USD.
-func getXmrPrice(currencies []string, fiatRates map[string]float64) (priceUpdate, error) {
+func getXmrPrice(currencies []string, fiatRates map[string]float64, fee float64) (priceUpdate, error) {
 	var pu priceUpdate
 
 	// Get EUR rate
@@ -90,12 +90,13 @@ func getXmrPrice(currencies []string, fiatRates map[string]float64) (priceUpdate
 				return pu, fmt.Errorf("ECB doesn't have a rate for this currency")
 			}
 		}
+		xp.Amount *= (1 + fee)
 		pu.Currencies = append(pu.Currencies, xp)
 	}
 	return pu, err
 }
 
-func pricePoll(currencies []string, fiatRates map[string]float64) {
+func pricePoll(currencies []string, fiatRates map[string]float64, fee float64) {
 	pause := false
 	for {
 		select {
@@ -103,7 +104,7 @@ func pricePoll(currencies []string, fiatRates map[string]float64) {
 			pause = p
 		case <-time.After(cfg.PricePollFreq):
 			if !pause {
-				prices, err := getXmrPrice(currencies, fiatRates)
+				prices, err := getXmrPrice(currencies, fiatRates, fee)
 
 				if err != nil {
 					log.Error().Err(err).Msg("Failed to get XMR price")

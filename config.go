@@ -32,9 +32,6 @@ type backendConfig struct {
 	MpayHealthPollFreq time.Duration `yaml:"moneropay_health_poll_frequency"`
 	PricePollFreq      time.Duration `yaml:"price_poll_frequency"`
 	Currencies         []string      `yaml:"currencies"`
-	Motd               string        `yaml:"motd"`
-	StateTimeout       time.Duration `yaml:"state_timeout"`
-	FinishTimeout      time.Duration `yaml:"finish_timeout"`
 	FallbackPrice      float64       `yaml:"fallback_price"`
 	FiatRates          map[string]float64
 	Bind               string `yaml:"bind"`

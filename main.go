@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/eclipse/paho.golang/autopaho"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"
 	mpay "gitlab.com/moneropay/moneropay/v2/pkg/model"
+	"gitlab.com/moneropay/go-monero/walletrpc"
 	"gitlab.com/openkiosk/proto"
 )
 
@@ -26,6 +28,7 @@ type update struct {
 	// keyword description of what happened
 	Event string      `json:"event"`
 	Data  interface{} `json:"value"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
 type fiat struct {
@@ -91,7 +94,7 @@ func main() {
 	}
 
 	go session.appLogic()
-	go pricePoll(cfg.Currencies, cfg.FiatRates)
+	go pricePoll(cfg.Currencies, cfg.FiatRates, cfg.Fee)
 	go mpayHealthPoll()
 
 	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
@@ -106,9 +109,8 @@ func atmSessionHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	session.conn = c
-
-	cmd(session.broker, "moneyacceptord", "stop")
 	cmd(session.broker, "codescannerd", "start")
+
 	go session.handleIncoming()
 	go session.handleOutgoing()
 }
@@ -176,8 +178,36 @@ func (s *sessionData) appLogic() {
 				log.Info().Msg("Began new transaction")
 			case "moneyin":
 				s.state = MoneyIn
-				cmd(s.broker, "codescannerd", "stop")
 				cmd(s.broker, "moneyacceptord", "start")
+				cmd(s.broker, "codescannerd", "stop")
+			case "txinfo":
+				s.state = TxInfo
+				cmd(s.broker, "moneyacceptord", "stop")
+
+				// Calculate xmr given the rate and fiat
+				var xmrFloat float64 = 0
+				for currShort, balance := range s.fiatBalance {
+					xmrFloat += float64(balance) / (100 * s.xmrPrices[currShort])
+				}
+				s.xmr = uint64(xmrFloat * 1000000000000)
+				s.tx, s.err = mpayTransfer(s.xmr, s.address)
+				if s.err != nil {
+					log.Error().Err(s.err).Msg("Failed to transfer")
+					if err := sendToFrontend(update{Event: "error", Data: s.err.Error()}); err != nil {
+						log.Error().Err(s.err).Msg("Failed to send to frontend")
+					}
+					continue
+				}
+				xmrString := walletrpc.XMRToDecimal(s.xmr)
+				log.Info().Str("amount", xmrString).Str("address", s.address).Msg("Sent XMR")
+				if err := sendToFrontend(update{
+					Event: "txinfo", Data: struct{Tx, Amount string}{
+						Tx: s.tx.TxHashList[0],
+						Amount: xmrString,
+					},
+				}); err != nil {
+					log.Error().Err(s.err).Msg("Failed to send to frontend")
+				}
 			case "cancel":
 				s.reset()
 				log.Info().Msg("Cancelled transaction")

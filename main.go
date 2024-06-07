@@ -43,7 +43,6 @@ type sessionData struct {
 	address     string
 	fiatBalance map[string]int64
 	xmr         uint64
-	fee         float64
 	xmrPrices   map[string]float64
 	err         error
 	height      int
@@ -75,6 +74,11 @@ var (
 )
 
 var upgrader = websocket.Upgrader{} // use default options
+
+type txinfoData struct {
+	Tx string `json:"tx"`
+	Amount string `json:"amount"`
+}
 
 func main() {
 	cfg = loadConfig()
@@ -184,12 +188,16 @@ func (s *sessionData) appLogic() {
 				s.state = TxInfo
 				cmd(s.broker, "moneyacceptord", "stop")
 
+				fmt.Printf("%v\n", s.fiatBalance)
 				// Calculate xmr given the rate and fiat
 				var xmrFloat float64 = 0
 				for currShort, balance := range s.fiatBalance {
-					xmrFloat += float64(balance) / (100 * s.xmrPrices[currShort])
+					xf := float64(balance) / s.xmrPrices[currShort]
+					log.Info().Float64("summing up", xf).Msg("")
+					xmrFloat += xf
 				}
 				s.xmr = uint64(xmrFloat * 1000000000000)
+				log.Info().Uint64("xmr", s.xmr).Float64("xmrFloat", xmrFloat).Msg("calc")
 				s.tx, s.err = mpayTransfer(s.xmr, s.address)
 				if s.err != nil {
 					log.Error().Err(s.err).Msg("Failed to transfer")
@@ -201,13 +209,15 @@ func (s *sessionData) appLogic() {
 				xmrString := walletrpc.XMRToDecimal(s.xmr)
 				log.Info().Str("amount", xmrString).Str("address", s.address).Msg("Sent XMR")
 				if err := sendToFrontend(update{
-					Event: "txinfo", Data: struct{Tx, Amount string}{
+					Event: "txinfo", Data: txinfoData{
 						Tx: s.tx.TxHashList[0],
 						Amount: xmrString,
 					},
 				}); err != nil {
 					log.Error().Err(s.err).Msg("Failed to send to frontend")
 				}
+				s.reset()
+				log.Info().Msg("Finalized transaction")
 			case "cancel":
 				s.reset()
 				log.Info().Msg("Cancelled transaction")
@@ -258,6 +268,7 @@ func (s *sessionData) appLogic() {
 				if err := sendToFrontend(update{Event: "moneyin", Data: data}); err != nil {
 					log.Error().Err(err).Msg("Failed to send to frontend")
 				}
+				fmt.Printf("fiat balance: %v\n", s.fiatBalance)
 			}
 
 		case price := <-priceEvent:
@@ -277,7 +288,6 @@ func (s *sessionData) reset() {
 	s.address = ""
 	s.fiatBalance = make(map[string]int64)
 	s.xmr = 0
-	s.fee = 0
 	s.err = nil
 	s.tx = nil
 

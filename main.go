@@ -175,6 +175,7 @@ func (s *sessionData) appLogic() {
 			log.Info().Str("type", front.Event).Msg("Received frontend event")
 			switch front.Event {
 			case "start":
+				s.reset()
 				s.state = AddressIn
 				// Pause price updates and health checks
 				pricePause <- true

@@ -98,6 +98,16 @@ func getXmrPrice(currencies []string, fiatRates map[string]float64, fee float64)
 
 func pricePoll(currencies []string, fiatRates map[string]float64, fee float64) {
 	pause := false
+
+	// Fetch the price for the first time without the wait.
+	prices, err := getXmrPrice(currencies, fiatRates, fee)
+
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get XMR price")
+	} else {
+		priceEvent <- prices
+	}
+
 	for {
 		select {
 		case p := <-pricePause:

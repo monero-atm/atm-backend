@@ -10,8 +10,6 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-var cfg backendConfig
-
 func onConnectionUp(cm *autopaho.ConnectionManager, connAck *paho.Connack) {
 	log.Info().Msg("MQTT connection up.")
 	if _, err := cm.Subscribe(context.Background(), &paho.Subscribe{

@@ -41,6 +41,8 @@ type sessionData struct {
 	xmrPrices   map[string]float64
 	err         error
 	tx          *mpay.TransferPostResponse
+	lastPrice   *priceUpdate
+	notifyPrice bool
 }
 
 var (
@@ -62,6 +64,8 @@ var (
 	pricePause chan bool
 
 	mpayHealthPause chan bool
+
+	cfg backendConfig
 )
 
 var upgrader = websocket.Upgrader{} // use default options
@@ -85,6 +89,7 @@ func main() {
 		broker:      connectToBroker(),
 		xmrPrices:   make(map[string]float64),
 		fiatBalance: make(map[string]int64),
+		notifyPrice: true,
 	}
 
 	go session.appLogic()
@@ -170,6 +175,7 @@ func (s *sessionData) appLogic() {
 				// Pause price updates and health checks
 				pricePause <- true
 				mpayHealthPause <- true
+				s.notifyPrice = false
 				log.Info().Msg("Began new transaction")
 			case "moneyin":
 				s.state = MoneyIn
@@ -246,6 +252,7 @@ func (s *sessionData) appLogic() {
 				if s.state == Idle {
 					pricePause <- true
 					mpayHealthPause <- true
+					s.notifyPrice = false
 					log.Info().Msg("Began new transaction")
 				}
 			}
@@ -263,10 +270,16 @@ func (s *sessionData) appLogic() {
 			}
 
 		case price := <-priceEvent:
+			s.lastPrice = &price
 			for _, pc := range price.Currencies {
 				s.xmrPrices[pc.Short] = pc.Amount
 			}
-			if err := sendToFrontend(update{Event: "price", Data: price}); err != nil {
+
+		case <-time.After(cfg.PriceNotifyFreq):
+			if !s.notifyPrice || s.lastPrice == nil {
+				continue
+			}
+			if err := sendToFrontend(update{Event: "price", Data: s.lastPrice}); err != nil {
 				log.Error().Err(err).Msg("Failed to send to frontend")
 			}
 		}
@@ -281,6 +294,7 @@ func (s *sessionData) reset() {
 	s.xmr = 0
 	s.err = nil
 	s.tx = nil
+	s.notifyPrice = true
 
 	// Enable price updates
 	pricePause <- false

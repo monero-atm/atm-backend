@@ -28,8 +28,11 @@ moneropay_timeout: "3m"
 # Check MoneroPay's /health this often.
 moneropay_health_poll_frequency: "10s"
 
-# Update the price value this often.
+# Fetch the price value from Kraken this often.
 price_poll_frequency: "10s"
+
+# Send price data to frontend this often.
+price_notification_frequency: "2s"
 
 # Supported currency or currencies
 currencies:

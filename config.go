@@ -34,7 +34,8 @@ type backendConfig struct {
 	Currencies         []string      `yaml:"currencies"`
 	FallbackPrice      float64       `yaml:"fallback_price"`
 	FiatRates          map[string]float64
-	Bind               string `yaml:"bind"`
+	Bind               string        `yaml:"bind"`
+	PriceNotifyFreq    time.Duration `yaml:"price_notification_frequency"`
 }
 
 func loadConfig() backendConfig {

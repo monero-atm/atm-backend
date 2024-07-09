@@ -10,8 +10,8 @@ import (
 	"github.com/eclipse/paho.golang/autopaho"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"
-	mpay "gitlab.com/moneropay/moneropay/v2/pkg/model"
 	"gitlab.com/moneropay/go-monero/walletrpc"
+	mpay "gitlab.com/moneropay/moneropay/v2/pkg/model"
 	"gitlab.com/openkiosk/proto"
 )
 
@@ -26,14 +26,9 @@ const (
 
 type update struct {
 	// keyword description of what happened
-	Event string      `json:"event"`
-	Data  interface{} `json:"value"`
-	Timestamp time.Time `json:"timestamp"`
-}
-
-type fiat struct {
-	amount   uint64
-	currency string
+	Event     string      `json:"event"`
+	Data      interface{} `json:"value"`
+	Timestamp time.Time   `json:"timestamp"`
 }
 
 type sessionData struct {
@@ -45,9 +40,6 @@ type sessionData struct {
 	xmr         uint64
 	xmrPrices   map[string]float64
 	err         error
-	height      int
-	width       int
-	mpayHealth  bool
 	tx          *mpay.TransferPostResponse
 }
 
@@ -69,14 +61,13 @@ var (
 	priceEvent chan priceUpdate
 	pricePause chan bool
 
-	mpayHealthUpdate chan mpayHealthEvent
-	mpayHealthPause  chan bool
+	mpayHealthPause chan bool
 )
 
 var upgrader = websocket.Upgrader{} // use default options
 
 type txinfoData struct {
-	Tx string `json:"tx"`
+	Tx     string `json:"tx"`
 	Amount string `json:"amount"`
 }
 
@@ -87,7 +78,6 @@ func main() {
 	outgoing = make(chan []byte)
 	priceEvent = make(chan priceUpdate)
 	pricePause = make(chan bool)
-	mpayHealthUpdate = make(chan mpayHealthEvent)
 	mpayHealthPause = make(chan bool)
 	okUpdate = make(chan proto.Event)
 
@@ -211,7 +201,7 @@ func (s *sessionData) appLogic() {
 				log.Info().Str("amount", xmrString).Str("address", s.address).Msg("Sent XMR")
 				if err := sendToFrontend(update{
 					Event: "txinfo", Data: txinfoData{
-						Tx: s.tx.TxHashList[0],
+						Tx:     s.tx.TxHashList[0],
 						Amount: xmrString,
 					},
 				}); err != nil {

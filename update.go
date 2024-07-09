@@ -19,13 +19,13 @@ func parseAddress(addr string) string {
 
 func addressValidator(s string) error {
 	if len(s) != 95 {
-		return fmt.Errorf("Invalid address length")
+		return fmt.Errorf("invalid address length")
 	}
 	if cfg.Mode == "mainnet" && !(s[0] == '8' || s[0] == '4') {
-		return fmt.Errorf("Invalid mainnet address")
+		return fmt.Errorf("invalid mainnet address")
 	}
 	if cfg.Mode == "stagenet" && !(s[0] == '7' || s[0] == '5') {
-		return fmt.Errorf("Invalid stagenet address")
+		return fmt.Errorf("invalid stagenet address")
 	}
 	return nil
 }

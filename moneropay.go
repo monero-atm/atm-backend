@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -20,7 +21,7 @@ func mpayTransfer(amount uint64, address string) (*mpay.TransferPostResponse, er
 	}
 	reqData := mpay.TransferPostRequest{
 		Destinations: []walletrpc.Destination{
-			{Amount: amount, Address: address},
+			{Amount: amount, Address: strings.TrimSpace(address)},
 		}}
 	b := new(bytes.Buffer)
 	if err := json.NewEncoder(b).Encode(reqData); err != nil {
@@ -69,8 +70,6 @@ func mpayHealth() (*mpay.HealthResponse, error) {
 	}
 	return &respData, nil
 }
-
-type mpayHealthEvent bool
 
 func mpayHealthPoll() {
 	pause := false

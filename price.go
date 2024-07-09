@@ -52,7 +52,7 @@ func getKrakenRate(currencyShort string) (float64, error) {
 	} else if currencyShort == "USD" {
 		rate = kp.Result.XmrUsd.C[0]
 	} else {
-		return 0, fmt.Errorf("Non-existent XMR pair on Kraken")
+		return 0, fmt.Errorf("non-existent XMR pair on Kraken")
 	}
 	return strconv.ParseFloat(rate, 64)
 }

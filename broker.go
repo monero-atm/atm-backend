@@ -67,13 +67,6 @@ func connectToBroker() *autopaho.ConnectionManager {
 	return cm
 }
 
-func brokerDisconnect(cm *autopaho.ConnectionManager) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	_ = cm.Disconnect(ctx)
-	log.Info().Msg("Shutdown complete")
-}
-
 func cmd(broker *autopaho.ConnectionManager, topic, cmd string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
